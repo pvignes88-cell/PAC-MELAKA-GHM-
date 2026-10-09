@@ -13,47 +13,42 @@
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, deleteDoc, updateDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // Global Firebase setup with environment detection & offline fallback
-    const defaultAppId = 'pac-og-triage-system';
-    const appId = typeof __app_id !== 'undefined' ? __app_id : defaultAppId;
-   
+    // Embedded Firebase Configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyC0pdUxiQkigses8T5op4YcA97boW9Conc",
+      authDomain: "pac-triage.firebaseapp.com",
+      projectId: "pac-triage",
+      storageBucket: "pac-triage.firebasestorage.app",
+      messagingSenderId: "174957565531",
+      appId: "1:174957565531:web:d0a6df3a2d833c6914917e",
+      measurementId: "G-ZG5RQHKFQG"
+    };
+
+    const appId = 'pac-og-triage-system';
     let db = null;
     let auth = null;
     let currentUser = null;
     let isCloudReady = false;
 
-    // Default configuration placeholder or environment provided
-    const rawConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-   
-    if (rawConfig) {
-      try {
-        const firebaseConfig = JSON.parse(rawConfig);
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
+    try {
+      const app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      auth = getAuth(app);
 
-        // Authenticate first before queries (Rule 3)
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+      await signInAnonymously(auth);
+
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          currentUser = user;
+          isCloudReady = true;
+          window.syncStatusUpdate(true, 'Awan Aktif (Tersambung)');
+          initCloudListeners();
         } else {
-          await signInAnonymously(auth);
+          window.syncStatusUpdate(false, 'Luar Talian (Storan Lokal)');
         }
-
-        onAuthStateChanged(auth, (user) => {
-          if (user) {
-            currentUser = user;
-            isCloudReady = true;
-            window.syncStatusUpdate(true, 'Awan Aktif (Tersambung)');
-            initCloudListeners();
-          } else {
-            window.syncStatusUpdate(false, 'Luar Talian (Storan Lokal)');
-          }
-        });
-      } catch (err) {
-        console.warn("Firebase initialization skipped, defaulting to Local Mode:", err);
-        window.syncStatusUpdate(false, 'Mod Standalone / Lokal');
-      }
-    } else {
+      });
+    } catch (err) {
+      console.warn("Firebase initialization error, defaulting to Local Mode:", err);
       window.syncStatusUpdate(false, 'Mod Standalone / Lokal');
     }
 
@@ -77,7 +72,6 @@
           }
         });
 
-        // Pass to window handler
         window.handleCloudSyncUpdate(loadedList, loadedArchive);
       }, (error) => {
         console.error("Firestore sync error:", error);
@@ -87,9 +81,7 @@
 
     // Exposed Cloud Methods
     window.cloudSavePatient = async (patient) => {
-      if (!isCloudReady || !db || !currentUser) {
-        return false;
-      }
+      if (!isCloudReady || !db || !currentUser) return false;
       try {
         const patientRef = doc(db, 'artifacts', appId, 'public', 'data', 'pac_patients', patient.id);
         await setDoc(patientRef, patient);
@@ -318,7 +310,7 @@
           <i class="fa-solid fa-triangle-exclamation"></i>
         </div>
         <div>
-          <h3 id="slaBreachTitle" class="font-black text-xs sm:text-sm uppercase tracking-wide">🚨 AMARAN: PESAKIT MELEBIHI HAD MASA MENUNGGU!</h3>
+          <h3 id="slaBreachTitle" class="font-black text-xs sm:text-sm uppercase tracking-wide">AMARAN: PESAKIT MELEBIHI HAD MASA MENUNGGU!</h3>
           <p id="slaBreachText" class="text-xs font-semibold opacity-95">Sila buat penilaian MO dengan segera.</p>
         </div>
       </div>
@@ -339,7 +331,7 @@
       </button>
     </div>
 
-    <!-- FAST-TRACK REGISTRATION FORM (Hidden in TV Mode for clean wallboard display) -->
+    <!-- FAST-TRACK REGISTRATION FORM -->
     <div id="triageRegistrationCard" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm no-print space-y-4 tv-hidden">
       <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
         <div class="flex items-center space-x-2">
@@ -367,8 +359,6 @@
       </div>
 
       <form id="triageForm" onsubmit="handleFastTriageSubmit(event)" class="space-y-4">
-       
-        <!-- Row 1: Demographics + Direct Free-flow GA -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Pesakit *</label>
@@ -385,15 +375,9 @@
             <input type="number" id="ptAge" required placeholder="28" min="10" max="65" class="w-full text-xs rounded-xl border border-slate-300 p-2.5 focus:ring-2 focus:ring-hospital-600 focus:outline-none">
           </div>
 
-          <!-- FREE-FLOW GESTATIONAL AGE FIELD -->
           <div class="bg-sky-50/50 p-2 rounded-xl border border-sky-200">
-            <label class="block text-xs font-black text-hospital-800 mb-1">
-              Usia Kandungan (GA) *
-            </label>
-           
+            <label class="block text-xs font-black text-hospital-800 mb-1">Usia Kandungan (GA) *</label>
             <input type="text" id="ptGA" required placeholder="Taip terus: 34 minggu / 32+4 / Term / Gynae" class="w-full text-xs font-bold rounded-lg border border-sky-300 p-2 bg-white text-hospital-900 focus:ring-2 focus:ring-hospital-600 focus:outline-none shadow-xs">
-           
-            <!-- Quick Chips -->
             <div class="flex flex-wrap gap-1 mt-1.5">
               <button type="button" onclick="setQuickGA('Term (37 - 40w)')" class="text-[9px] bg-white border border-sky-200 hover:bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-semibold">Term</button>
               <button type="button" onclick="setQuickGA('Preterm (< 34w)')" class="text-[9px] bg-red-100 border border-red-200 hover:bg-red-200 text-red-800 px-1.5 py-0.5 rounded font-semibold">&lt; 34w</button>
@@ -404,7 +388,6 @@
           </div>
         </div>
 
-        <!-- Row 2: Waktu Tiba & Aduan Utama -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">Waktu Tiba di PAC *</label>
@@ -417,7 +400,6 @@
           </div>
         </div>
 
-        <!-- Row 3: Intuitive Clinical Symptom Boxes -->
         <div class="space-y-2.5 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
             <div>
@@ -427,17 +409,14 @@
               <p class="text-[11px] text-slate-500 font-medium">Staf hanya perlu tandakan simptom pesakit. Sistem akan tentukan Kod Merah, Kuning, atau Hijau secara automatik.</p>
             </div>
 
-            <!-- Instant Symptom Filter Input -->
             <div class="relative w-full sm:w-64">
               <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-xs"></i>
               <input type="text" id="symptomSearchInput" oninput="filterSymptoms()" placeholder="Cari simptom: cth. ketuban, pendarahan, bp..." class="w-full text-xs pl-7 pr-2.5 py-1.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-hospital-600">
             </div>
           </div>
 
-          <!-- 6 Intuitive Clinical Group Boxes -->
           <div id="clinicalCategoriesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
-           
-            <!-- Box 1: Tekanan Darah & Sawan -->
+            <!-- Box 1 -->
             <div class="symptom-box bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
               <div class="font-bold text-slate-800 text-[11px] flex items-center gap-1.5 border-b border-slate-100 pb-1 text-hospital-700">
                 <i class="fa-solid fa-heart-pulse"></i> 1. Tekanan Darah & Sawan (BP)
@@ -466,7 +445,7 @@
               </div>
             </div>
 
-            <!-- Box 2: Pendarahan (Bleeding / APH) -->
+            <!-- Box 2 -->
             <div class="symptom-box bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
               <div class="font-bold text-slate-800 text-[11px] flex items-center gap-1.5 border-b border-slate-100 pb-1 text-hospital-700">
                 <i class="fa-solid fa-droplet"></i> 2. Pendarahan (Bleeding)
@@ -495,7 +474,7 @@
               </div>
             </div>
 
-            <!-- Box 3: Sakit Bersalin & Ketuban -->
+            <!-- Box 3 -->
             <div class="symptom-box bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
               <div class="font-bold text-slate-800 text-[11px] flex items-center gap-1.5 border-b border-slate-100 pb-1 text-hospital-700">
                 <i class="fa-solid fa-person-pregnant"></i> 3. Bersalin & Air Ketuban
@@ -532,7 +511,7 @@
               </div>
             </div>
 
-            <!-- Box 4: Pergerakan Bayi & Keadaan Janin -->
+            <!-- Box 4 -->
             <div class="symptom-box bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
               <div class="font-bold text-slate-800 text-[11px] flex items-center gap-1.5 border-b border-slate-100 pb-1 text-hospital-700">
                 <i class="fa-solid fa-baby"></i> 4. Pergerakan Bayi & CTG
@@ -553,7 +532,7 @@
               </div>
             </div>
 
-            <!-- Box 5: Demam, Sepsis & Kesihatan Ibu -->
+            <!-- Box 5 -->
             <div class="symptom-box bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
               <div class="font-bold text-slate-800 text-[11px] flex items-center gap-1.5 border-b border-slate-100 pb-1 text-hospital-700">
                 <i class="fa-solid fa-temperature-arrow-up"></i> 5. Demam, Sepsis & Ibu Sakit
@@ -590,7 +569,7 @@
               </div>
             </div>
 
-            <!-- Box 6: Kemasukan Elektif, Prosedur & Temujanji Rutin -->
+            <!-- Box 6 -->
             <div class="symptom-box bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
               <div class="font-bold text-slate-800 text-[11px] flex items-center gap-1.5 border-b border-slate-100 pb-1 text-hospital-700">
                 <i class="fa-solid fa-clipboard-list"></i> 6. Elektif, Prosedur & Rutin
@@ -626,7 +605,6 @@
           </div>
         </div>
 
-        <!-- Live Triage Output Action Bar -->
         <div id="triageActionBar" class="p-3.5 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 border-slate-200">
           <div class="flex items-center gap-3">
             <span id="decisionBadge" class="text-xs sm:text-sm font-black px-3 py-1.5 rounded-full uppercase bg-slate-200 text-slate-600 border border-slate-300 shadow-xs">
@@ -650,8 +628,6 @@
 
     <!-- ACTIVE QUEUE LISTS PER GROUP -->
     <div class="space-y-4">
-     
-      <!-- Queue Header Controls & Mobile Filters -->
       <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 no-print tv-card">
         <div class="flex items-center space-x-2">
           <i class="fa-solid fa-stopwatch text-hospital-600 text-base"></i>
@@ -662,7 +638,6 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2 text-xs">
-          <!-- Mobile Specific Group Quick Filters -->
           <div class="flex items-center bg-slate-100 p-1 rounded-xl">
             <button onclick="setFilterCategory('ALL')" id="fltAll" class="px-2 py-1 rounded-lg bg-white font-bold text-slate-800 shadow-xs">Semua</button>
             <button onclick="setFilterCategory('A')" id="fltA" class="px-2 py-1 rounded-lg text-red-600 font-bold hover:bg-white/60">A (Merah)</button>
@@ -670,7 +645,6 @@
             <button onclick="setFilterCategory('C')" id="fltC" class="px-2 py-1 rounded-lg text-emerald-600 font-bold hover:bg-white/60">C (Hijau)</button>
           </div>
 
-          <!-- Search Filter -->
           <div class="relative">
             <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-400 text-xs"></i>
             <input type="text" id="searchInput" oninput="renderAllQueues()" placeholder="Cari Nama / IC..." class="pl-7 pr-2.5 py-1 text-xs border border-slate-300 rounded-xl w-32 sm:w-44 focus:outline-none bg-white">
@@ -728,7 +702,7 @@
 
   </main>
 
-  <!-- MODAL PANDUAN DEPLOYMENT (UNTUK SAMBUNG KE TV & TELEFON MO) -->
+  <!-- MODAL PANDUAN DEPLOYMENT -->
   <div id="deployGuideModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 no-print">
     <div class="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto custom-scrollbar">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -745,47 +719,38 @@
       </div>
 
       <div class="space-y-4 text-xs text-slate-700 leading-relaxed">
-       
-        <!-- Option 1: Live Cloud Sync -->
         <div class="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1.5">
           <div class="font-black text-emerald-900 text-sm flex items-center gap-1.5">
             <i class="fa-solid fa-cloud"></i> Pilihan 1: Hosting Percuma (Paling Disyorkan untuk PAC)
           </div>
           <p class="text-emerald-800">
-            Hanya muat naik fail <code>index.html</code> ini ke mana-mana hosting percuma seperti <strong>GitHub Pages</strong>, <strong>Vercel</strong>, atau <strong>Netlify</strong>:
+            Muat naik fail <code>index.html</code> ini ke <strong>GitHub Pages</strong>, <strong>Vercel</strong>, atau <strong>Netlify</strong>:
           </p>
           <ol class="list-decimal list-inside space-y-1 pl-1 text-emerald-900 font-medium">
-            <li>Dapatkan URL web (contohnya: <code>https://pac-triage-hosp.web.app</code>).</li>
-            <li><strong>Di TV Monitor PAC:</strong> Buka link tersebut di pelayar TV/Smart TV, tekan butang <code>Skrin TV PAC</code> di bahagian atas, dan tekan <code>F11</code> untuk skrin penuh.</li>
-            <li><strong>Di Telefon MO / Pakar:</strong> Cipta QR Code untuk pautan tersebut dan tampal di dinding PAC. MO hanya perlu imbas untuk buka paparan telefon dan tekan <em>"Mula Periksa"</em>.</li>
+            <li>Dapatkan URL web aplikasi anda.</li>
+            <li><strong>Di TV Monitor PAC:</strong> Buka pautan tersebut di pelayar TV/Smart TV, tekan <code>Skrin TV PAC</code> di bahagian atas header, dan tekan <code>F11</code> untuk paparan skrin penuh.</li>
+            <li><strong>Di Telefon MO / Pakar:</strong> Cipta QR Code pautan tersebut dan tampal di kaunter PAC untuk dimbas oleh doktor.</li>
           </ol>
         </div>
 
-        <!-- Option 2: Local Hospital Wi-Fi Deployment -->
         <div class="p-3.5 bg-sky-50 rounded-xl border border-sky-200 space-y-1.5">
           <div class="font-black text-sky-900 text-sm flex items-center gap-1.5">
             <i class="fa-solid fa-wifi"></i> Pilihan 2: Rangkaian Tempatan Hospital (Hospital Wi-Fi / Intranet)
           </div>
           <p class="text-sky-800">
-            Jika hospital tidak membenarkan akses awam internet, PC di kaunter triaj boleh bertindak sebagai hos mini (Local Server):
+            Jika hospital melarang akses internet awam, PC kaunter boleh bertindak sebagai pelayan tempatan (Local Server) menggunakan Live Server.
           </p>
-          <ul class="list-disc list-inside space-y-1 pl-1 text-sky-900 font-medium">
-            <li>Gunakan aplikasi seperti <em>Live Server</em> atau <em>Node http-server</em> pada PC triaj.</li>
-            <li>Semua TV dan telefon pintar yang bersambung dengan Wi-Fi hospital yang sama boleh membuka alamat IP PC tersebut (cth: <code>http://192.168.1.50:8080</code>).</li>
-          </ul>
         </div>
 
-        <!-- Instructions for MO Phone Action -->
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
           <div class="font-bold text-slate-800 mb-1 flex items-center gap-1">
             <i class="fa-solid fa-mobile-screen-button text-hospital-600"></i> Cara MO Kendalikan Pesakit Melalui Telefon:
           </div>
           <p class="text-slate-600">
-            1. Tekan <strong>"🩺 Mula Periksa"</strong> apabila mula memanggil pesakit. Kad pesakit akan bertukar warna biru dengan status <em>Sedang Diperiksa</em> di TV Monitor.<br>
-            2. Tekan <strong>"✅ Selesai Penilaian"</strong> setelah selesai. Pesakit akan terus dikeluarkan dari giliran aktif TV dan dimasukkan ke Arkib.
+            1. Tekan <strong>"Mula Periksa"</strong> apabila mula memanggil pesakit. Kad pesakit akan bertukar warna biru dengan status <em>Sedang Diperiksa</em> di TV Monitor.<br>
+            2. Tekan <strong>"Selesai Penilaian"</strong> setelah selesai. Pesakit akan terus dikeluarkan dari giliran aktif TV dan dimasukkan ke Arkib.
           </p>
         </div>
-
       </div>
 
       <div class="flex justify-end pt-2 border-t border-slate-100">
@@ -852,4 +817,724 @@
       <div id="slipPrintArea" class="space-y-3 p-1">
         <div class="border-b-2 border-slate-900 pb-2.5 flex justify-between items-start">
           <div>
-            <h2 class="text-base font-black tracking-tight text-slate-900 uppercase">SLIP T
+            <h2 class="text-base font-black tracking-tight text-slate-900 uppercase">SLIP TRIAJ PESAKIT PAC O&G</h2>
+            <p class="text-[10px] text-slate-600 font-semibold">Pusat Kemasukan Pesakit • Jabatan Obstetrik & Ginekologi</p>
+          </div>
+          <div class="text-right">
+            <span id="slipTriageBadge" class="px-2.5 py-1 rounded text-xs font-black uppercase text-white bg-slate-800">KUMPULAN -</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs border-b border-slate-200 pb-2.5">
+          <div>
+            <span class="text-[10px] text-slate-500 uppercase font-bold block">Nama Pesakit:</span>
+            <strong id="slipName" class="text-slate-900 text-sm block truncate">-</strong>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 uppercase font-bold block">No. IC / Pasport:</span>
+            <strong id="slipIC" class="text-slate-900 font-mono block">-</strong>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 uppercase font-bold block">Umur:</span>
+            <span id="slipAge" class="font-semibold text-slate-800">-</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 uppercase font-bold block">Usia Kandungan (GA):</span>
+            <span id="slipGA" class="font-black text-sky-900">-</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 uppercase font-bold block">Waktu Ketibaan:</span>
+            <span id="slipArrivalTime" class="font-mono text-slate-800">-</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 uppercase font-bold block">Sasaran Masa Tindakan:</span>
+            <span id="slipSLATarget" class="font-bold text-slate-800">-</span>
+          </div>
+        </div>
+
+        <div class="space-y-1 text-xs">
+          <span class="text-[10px] text-slate-500 uppercase font-bold block">Aduan Utama / Simptom:</span>
+          <p id="slipComplaints" class="p-2 bg-slate-50 rounded-lg border border-slate-200 text-slate-800 font-medium">-</p>
+        </div>
+
+        <div class="text-[10px] text-slate-400 italic text-center pt-1 border-t border-slate-100">
+          Dicetak pada <span id="slipPrintedAt"></span> • Sistem Triaj PAC O&G
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button onclick="closePrintSlipModal()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs">Batal</button>
+        <button onclick="window.print()" class="px-4 py-1.5 bg-hospital-700 hover:bg-hospital-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs">
+          <i class="fa-solid fa-print"></i> Cetak Slip
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CORE APPLICATION LOGIC JAVASCRIPT -->
+  <script>
+    let activePatients = [];
+    let archivedPatients = [];
+    let currentFilterCategory = 'ALL';
+    let isAudioAlarmEnabled = false;
+    let audioContext = null;
+    let autoCalculatedCategory = null;
+
+    const SLA_THRESHOLDS = {
+      'A': { title: 'KUMPULAN A (MERAH)', minutes: 0, label: 'Serta-Merta (0 Min)' },
+      'B': { title: 'KUMPULAN B (KUNING)', minutes: 60, label: '30 – 60 Minit' },
+      'C': { title: 'KUMPULAN C (HIJAU)', minutes: 90, label: '60 – 90 Minit' }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initDefaultDateTime();
+      loadLocalBackup();
+      setInterval(updateLiveClock, 1000);
+      setInterval(tickWaitTimes, 5000);
+      runAutoTriageClassification();
+    });
+
+    function initDefaultDateTime() {
+      const now = new Date();
+      const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      document.getElementById('ptArrivalTime').value = localIso;
+    }
+
+    function updateLiveClock() {
+      const now = new Date();
+      const str = now.toLocaleDateString('ms-MY', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) + 
+                  ' • ' + now.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      document.getElementById('liveClock').innerText = str;
+    }
+
+    function loadLocalBackup() {
+      try {
+        const storedList = localStorage.getItem('pac_active_patients');
+        const storedArch = localStorage.getItem('pac_archive_patients');
+        if (storedList) activePatients = JSON.parse(storedList);
+        if (storedArch) archivedPatients = JSON.parse(storedArch);
+        renderAllQueues();
+        updateDashboardKPIs();
+      } catch(e) { console.error("Error loading localStorage:", e); }
+    }
+
+    function saveLocalBackup() {
+      try {
+        localStorage.setItem('pac_active_patients', JSON.stringify(activePatients));
+        localStorage.setItem('pac_archive_patients', JSON.stringify(archivedPatients));
+      } catch(e) { console.error("Error saving localStorage:", e); }
+    }
+
+    window.syncStatusUpdate = function(isOnline, text) {
+      const badge = document.getElementById('cloudStatusBadge');
+      const textElem = document.getElementById('cloudStatusText');
+      if (textElem) textElem.innerText = text;
+      if (isOnline) {
+        badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1";
+      } else {
+        badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1";
+      }
+    };
+
+    window.handleCloudSyncUpdate = function(cloudList, cloudArchive) {
+      activePatients = cloudList;
+      archivedPatients = cloudArchive;
+      saveLocalBackup();
+      renderAllQueues();
+      updateDashboardKPIs();
+    };
+
+    function runAutoTriageClassification() {
+      const checkboxes = document.querySelectorAll('input[name="symptomCheck"]:checked');
+      let highestGroup = 'C';
+      let selectedSymptoms = [];
+
+      checkboxes.forEach(cb => {
+        selectedSymptoms.push(cb.value);
+        const grp = cb.getAttribute('data-group');
+        if (grp === 'A') highestGroup = 'A';
+        else if (grp === 'B' && highestGroup !== 'A') highestGroup = 'B';
+      });
+
+      if (checkboxes.length === 0) {
+        autoCalculatedCategory = null;
+        updateTriageActionBar(null);
+      } else {
+        autoCalculatedCategory = highestGroup;
+        updateTriageActionBar(highestGroup);
+      }
+    }
+
+    function updateTriageActionBar(group) {
+      const badge = document.getElementById('decisionBadge');
+      const title = document.getElementById('decisionTitle');
+      const sla = document.getElementById('decisionSLA');
+
+      if (!group) {
+        badge.className = "text-xs sm:text-sm font-black px-3 py-1.5 rounded-full uppercase bg-slate-200 text-slate-600 border border-slate-300 shadow-xs";
+        badge.innerText = "Belum Ditriaj";
+        title.innerText = "SILA LENGKAPKAN MAKLUMAT";
+        sla.innerText = "Sasaran Tindakan MO: N/A";
+        return;
+      }
+
+      if (group === 'A') {
+        badge.className = "text-xs sm:text-sm font-black px-3 py-1.5 rounded-full uppercase bg-red-600 text-white border border-red-700 shadow-sm animate-pulse";
+        badge.innerText = "KUMPULAN A (MERAH)";
+        title.innerText = "KES KECEMASAN / URGENT";
+        sla.innerText = "Sasaran Tindakan MO: SERTA-MERTA (0 MINIT)";
+      } else if (group === 'B') {
+        badge.className = "text-xs sm:text-sm font-black px-3 py-1.5 rounded-full uppercase bg-amber-500 text-white border border-amber-600 shadow-sm";
+        badge.innerText = "KUMPULAN B (KUNING)";
+        title.innerText = "KES SEGERA / URGENT ATTENTION";
+        sla.innerText = "Sasaran Tindakan MO: Dalam Tempoh 30 – 60 Minit";
+      } else if (group === 'C') {
+        badge.className = "text-xs sm:text-sm font-black px-3 py-1.5 rounded-full uppercase bg-emerald-600 text-white border border-emerald-700 shadow-sm";
+        badge.innerText = "KUMPULAN C (HIJAU)";
+        title.innerText = "KES ELEKTIF / BUKAN KECEMASAN";
+        sla.innerText = "Sasaran Tindakan MO: Dalam Tempoh 60 – 90 Minit";
+      }
+    }
+
+    function filterSymptoms() {
+      const q = document.getElementById('symptomSearchInput').value.toLowerCase();
+      const items = document.querySelectorAll('.symptom-item');
+      items.forEach(item => {
+        const txt = item.innerText.toLowerCase();
+        if (txt.includes(q)) {
+          item.classList.remove('hidden');
+        } else {
+          item.classList.add('hidden');
+        }
+      });
+    }
+
+    function setQuickGA(val) {
+      document.getElementById('ptGA').value = val;
+    }
+
+    async function handleFastTriageSubmit(e) {
+      e.preventDefault();
+
+      if (!autoCalculatedCategory) {
+        showAlert('Sila Pilih Simptom', 'Sila tandakan sekurang-kurangnya satu aduan/masalah pesakit untuk menentukan Kod Warna Triaj.', 'warning');
+        return;
+      }
+
+      const name = document.getElementById('ptName').value.trim();
+      const ic = document.getElementById('ptIC').value.trim();
+      const age = document.getElementById('ptAge').value.trim();
+      const ga = document.getElementById('ptGA').value.trim();
+      const arrival = document.getElementById('ptArrivalTime').value;
+      const complaints = document.getElementById('ptComplaints').value.trim();
+
+      const selectedCbs = document.querySelectorAll('input[name="symptomCheck"]:checked');
+      let symptomsList = [];
+      selectedCbs.forEach(cb => symptomsList.push(cb.value));
+
+      const newPatient = {
+        id: 'pt_' + Date.now(),
+        name,
+        ic,
+        age,
+        ga,
+        arrivalTime: arrival,
+        complaints,
+        symptoms: symptomsList,
+        category: autoCalculatedCategory,
+        status: 'WAITING',
+        isAssessed: false,
+        assessedAt: null,
+        examiningStartedAt: null,
+        createdAt: new Date().toISOString()
+      };
+
+      activePatients.unshift(newPatient);
+      saveLocalBackup();
+      
+      if (window.cloudSavePatient) {
+        await window.cloudSavePatient(newPatient);
+      }
+
+      renderAllQueues();
+      updateDashboardKPIs();
+      resetForm();
+      showAlert('Pendaftaran Berjaya', `Pesakit ${name} berjaya didaftarkan bawah ${SLA_THRESHOLDS[newPatient.category].title}.`, 'success');
+    }
+
+    function resetForm() {
+      document.getElementById('triageForm').reset();
+      initDefaultDateTime();
+      const checkboxes = document.querySelectorAll('input[name="symptomCheck"]');
+      checkboxes.forEach(cb => cb.checked = false);
+      const items = document.querySelectorAll('.symptom-item');
+      items.forEach(item => item.classList.remove('hidden'));
+      document.getElementById('symptomSearchInput').value = '';
+      runAutoTriageClassification();
+    }
+
+    function loadQuickDemo(type) {
+      resetForm();
+      if (type === 'eclampsia') {
+        document.getElementById('ptName').value = 'Siti Nurhaliza Binti Ahmad';
+        document.getElementById('ptIC').value = '960815-10-5324';
+        document.getElementById('ptAge').value = '28';
+        document.getElementById('ptGA').value = '36 minggu';
+        document.getElementById('ptComplaints').value = 'Sakit kepala berterusan, pening & penglihatan kabur';
+        const cb = document.querySelector('input[value="Symptoms of IE (Imminent Eclampsia)"]');
+        if (cb) cb.checked = true;
+      } else if (type === 'pprom') {
+        document.getElementById('ptName').value = 'Tan Mei Ling';
+        document.getElementById('ptIC').value = '920310-08-6112';
+        document.getElementById('ptAge').value = '32';
+        document.getElementById('ptGA').value = '32+4 minggu';
+        document.getElementById('ptComplaints').value = 'Air ketuban meleleh keluar sejak jam 10 pagi';
+        const cb = document.querySelector('input[value="Pecah Air Ketuban (PROM / PPROM)"]');
+        if (cb) cb.checked = true;
+      } else if (type === 'elective') {
+        document.getElementById('ptName').value = 'Kavitha A/P Raman';
+        document.getElementById('ptIC').value = '891104-14-5580';
+        document.getElementById('ptAge').value = '35';
+        document.getElementById('ptGA').value = '38 minggu';
+        document.getElementById('ptComplaints').value = 'Kemasukan borang elektif IOL esok pagi';
+        const cb = document.querySelector('input[value="Kemasukan Elektif untuk IOL"]');
+        if (cb) cb.checked = true;
+      }
+      runAutoTriageClassification();
+    }
+
+    async function startExamination(patientId) {
+      const pt = activePatients.find(p => p.id === patientId);
+      if (pt) {
+        pt.status = 'EXAMINING';
+        pt.examiningStartedAt = new Date().toISOString();
+        saveLocalBackup();
+        if (window.cloudUpdatePatient) {
+          await window.cloudUpdatePatient(patientId, { status: 'EXAMINING', examiningStartedAt: pt.examiningStartedAt });
+        }
+        renderAllQueues();
+        updateDashboardKPIs();
+      }
+    }
+
+    async function completeAssessment(patientId) {
+      const ptIndex = activePatients.findIndex(p => p.id === patientId);
+      if (ptIndex !== -1) {
+        const pt = activePatients[ptIndex];
+        pt.isAssessed = true;
+        pt.status = 'ASSESSED';
+        pt.assessedAt = new Date().toISOString();
+        
+        archivedPatients.unshift(pt);
+        activePatients.splice(ptIndex, 1);
+        
+        saveLocalBackup();
+        if (window.cloudUpdatePatient) {
+          await window.cloudUpdatePatient(patientId, { isAssessed: true, status: 'ASSESSED', assessedAt: pt.assessedAt });
+        }
+        renderAllQueues();
+        updateDashboardKPIs();
+        showAlert('Penilaian Selesai', `Pesakit ${pt.name} telah dikeluarkan daripada giliran aktif.`, 'success');
+      }
+    }
+
+    async function deletePatient(patientId) {
+      if (confirm("Adakah anda pasti untuk memadam rekod pendaftaran pesakit ini?")) {
+        activePatients = activePatients.filter(p => p.id !== patientId);
+        archivedPatients = archivedPatients.filter(p => p.id !== patientId);
+        saveLocalBackup();
+        if (window.cloudDeletePatient) {
+          await window.cloudDeletePatient(patientId);
+        }
+        renderAllQueues();
+        updateDashboardKPIs();
+      }
+    }
+
+    async function restoreLastAssessed() {
+      if (archivedPatients.length === 0) {
+        showAlert('Tiada Rekod', 'Tiada pesakit dalam arkib untuk dikembalikan.', 'info');
+        return;
+      }
+      const restored = archivedPatients.shift();
+      restored.isAssessed = false;
+      restored.status = 'WAITING';
+      restored.assessedAt = null;
+      activePatients.unshift(restored);
+      saveLocalBackup();
+      if (window.cloudUpdatePatient) {
+        await window.cloudUpdatePatient(restored.id, { isAssessed: false, status: 'WAITING', assessedAt: null });
+      }
+      renderAllQueues();
+      renderArchiveTable();
+      updateDashboardKPIs();
+      showAlert('Dikembalikan', `Pesakit ${restored.name} telah dimasukkan semula ke giliran aktif.`, 'success');
+    }
+
+    function renderAllQueues() {
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+      
+      const groupAContainer = document.getElementById('queueGroupA');
+      const groupBContainer = document.getElementById('queueGroupB');
+      const groupCContainer = document.getElementById('queueGroupC');
+
+      groupAContainer.innerHTML = '';
+      groupBContainer.innerHTML = '';
+      groupCContainer.innerHTML = '';
+
+      let countA = 0, countB = 0, countC = 0;
+      let hasOverdueBreach = false;
+
+      activePatients.forEach(pt => {
+        const matchesSearch = pt.name.toLowerCase().includes(query) || pt.ic.includes(query);
+        const matchesCategory = (currentFilterCategory === 'ALL' || currentFilterCategory === pt.category);
+
+        if (matchesSearch && matchesCategory) {
+          const cardHtml = createPatientCardHTML(pt);
+          
+          if (pt.category === 'A') {
+            groupAContainer.innerHTML += cardHtml;
+            countA++;
+          } else if (pt.category === 'B') {
+            groupBContainer.innerHTML += cardHtml;
+            countB++;
+          } else if (pt.category === 'C') {
+            groupCContainer.innerHTML += cardHtml;
+            countC++;
+          }
+
+          if (pt.status === 'WAITING' && checkIsBreached(pt)) {
+            hasOverdueBreach = true;
+          }
+        }
+      });
+
+      if (countA === 0) groupAContainer.innerHTML = `<p class="text-xs text-slate-400 italic p-3 text-center">Tiada pesakit Kumpulan A dalam giliran.</p>`;
+      if (countB === 0) groupBContainer.innerHTML = `<p class="text-xs text-slate-400 italic p-3 text-center">Tiada pesakit Kumpulan B dalam giliran.</p>`;
+      if (countC === 0) groupCContainer.innerHTML = `<p class="text-xs text-slate-400 italic p-3 text-center">Tiada pesakit Kumpulan C dalam giliran.</p>`;
+
+      document.getElementById('badgeCountA').innerText = `${countA} Pesakit`;
+      document.getElementById('badgeCountB').innerText = `${countB} Pesakit`;
+      document.getElementById('badgeCountC').innerText = `${countC} Pesakit`;
+
+      const breachBanner = document.getElementById('slaBreachBanner');
+      if (hasOverdueBreach) {
+        breachBanner.classList.remove('hidden');
+        triggerAudioBeep();
+      } else {
+        breachBanner.classList.add('hidden');
+      }
+    }
+
+    function createPatientCardHTML(pt) {
+      const waitMins = calculateWaitingMinutes(pt.arrivalTime);
+      const targetMins = SLA_THRESHOLDS[pt.category].minutes;
+      const isBreached = pt.status === 'WAITING' && waitMins > targetMins && targetMins > 0;
+      const isExamining = pt.status === 'EXAMINING';
+
+      let cardBgClass = "bg-white border-slate-200";
+      if (isExamining) {
+        cardBgClass = "bg-sky-50 border-sky-400 ring-2 ring-sky-300";
+      } else if (isBreached) {
+        cardBgClass = "bg-rose-50 border-rose-400 ring-2 ring-rose-300";
+      }
+
+      const formattedArrival = new Date(pt.arrivalTime).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' });
+
+      return `
+        <div id="card_${pt.id}" class="p-3.5 rounded-xl border ${cardBgClass} shadow-2xs transition hover:shadow-md tv-card space-y-2">
+          <div class="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <h5 class="font-black text-slate-900 text-xs sm:text-sm tv-text-lg">${escapeHtml(pt.name)}</h5>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isExamining ? 'bg-sky-600 text-white' : (isBreached ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-100 text-slate-700')}">
+                  ${isExamining ? 'SEDANG DIPERIKSA MO' : (isBreached ? 'MELEBIHI HAD MASA' : 'MENUNGGU')}
+                </span>
+              </div>
+              <p class="text-[11px] text-slate-500 font-medium">IC: <span class="font-mono">${escapeHtml(pt.ic)}</span> • Umur: ${pt.age} thn • GA: <strong class="text-sky-900 font-bold">${escapeHtml(pt.ga)}</strong></p>
+            </div>
+
+            <div class="text-right shrink-0">
+              <div class="text-xs font-black font-mono ${isBreached ? 'text-rose-700' : 'text-slate-800'}">
+                <i class="fa-regular fa-clock"></i> ${waitMins} minit
+              </div>
+              <span class="text-[10px] text-slate-400 font-medium">Tiba: ${formattedArrival}</span>
+            </div>
+          </div>
+
+          <div class="text-xs text-slate-700 font-medium">
+            <strong class="text-slate-900">Aduan Utama:</strong> ${escapeHtml(pt.complaints)}
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100/80 no-print">
+            <div class="flex items-center gap-1.5">
+              <button onclick="openPrintSlipModal('${pt.id}')" class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition">
+                <i class="fa-solid fa-print"></i> Slip
+              </button>
+              <button onclick="deletePatient('${pt.id}')" class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-rose-100 text-rose-700 font-bold text-[11px] transition">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+              ${!isExamining ? `
+                <button onclick="startExamination('${pt.id}')" class="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs shadow-2xs transition flex items-center gap-1">
+                  <i class="fa-solid fa-user-doctor"></i> Mula Periksa
+                </button>
+              ` : ''}
+              <button onclick="completeAssessment('${pt.id}')" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-2xs transition flex items-center gap-1">
+                <i class="fa-solid fa-check"></i> Selesai Penilaian
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function calculateWaitingMinutes(arrivalTimeStr) {
+      if (!arrivalTimeStr) return 0;
+      const arrival = new Date(arrivalTimeStr).getTime();
+      const now = new Date().getTime();
+      const diffMs = now - arrival;
+      return Math.max(0, Math.floor(diffMs / 60000));
+    }
+
+    function checkIsBreached(pt) {
+      const waitMins = calculateWaitingMinutes(pt.arrivalTime);
+      const threshold = SLA_THRESHOLDS[pt.category].minutes;
+      return threshold > 0 && waitMins > threshold;
+    }
+
+    function tickWaitTimes() {
+      renderAllQueues();
+      updateDashboardKPIs();
+    }
+
+    function updateDashboardKPIs() {
+      const totalRegistered = activePatients.length + archivedPatients.length;
+      const activeWaiting = activePatients.filter(p => p.status === 'WAITING').length;
+      const inConsultation = activePatients.filter(p => p.status === 'EXAMINING').length;
+      const totalAssessed = archivedPatients.length;
+
+      let breachedCount = 0;
+      activePatients.forEach(p => {
+        if (p.status === 'WAITING' && checkIsBreached(p)) breachedCount++;
+      });
+
+      let countA = activePatients.filter(p => p.category === 'A').length;
+      let countB = activePatients.filter(p => p.category === 'B').length;
+      let countC = activePatients.filter(p => p.category === 'C').length;
+
+      document.getElementById('dashTotalRegistered').innerText = totalRegistered;
+      document.getElementById('dashActiveWaiting').innerText = activeWaiting;
+      document.getElementById('dashWaitingBreakdown').innerText = `${countA}A • ${countB}B • ${countC}C`;
+      document.getElementById('dashInConsultation').innerText = inConsultation;
+      document.getElementById('dashTotalAssessed').innerText = totalAssessed;
+      document.getElementById('dashTotalBreached').innerText = breachedCount;
+      document.getElementById('archiveCountBadge').innerText = totalAssessed;
+
+      const compliance = totalRegistered > 0 ? Math.round(((totalRegistered - breachedCount) / totalRegistered) * 100) : 100;
+      document.getElementById('dashComplianceRate').innerText = `Capai Sasaran: ${compliance}%`;
+    }
+
+    function setViewMode(mode) {
+      const body = document.getElementById('mainBody');
+      const btnPC = document.getElementById('viewBtnPC');
+      const btnTV = document.getElementById('viewBtnTV');
+      const btnMobile = document.getElementById('viewBtnMobile');
+
+      btnPC.className = "px-2.5 py-1 rounded-lg font-semibold text-sky-200 hover:text-white flex items-center gap-1.5 transition";
+      btnTV.className = "px-2.5 py-1 rounded-lg font-semibold text-sky-200 hover:text-white flex items-center gap-1.5 transition";
+      btnMobile.className = "px-2.5 py-1 rounded-lg font-semibold text-sky-200 hover:text-white flex items-center gap-1.5 transition";
+
+      if (mode === 'TV') {
+        body.classList.add('mode-tv');
+        btnTV.className = "px-2.5 py-1 rounded-lg font-bold bg-white text-hospital-900 shadow-xs flex items-center gap-1.5 transition";
+      } else if (mode === 'MOBILE') {
+        body.classList.remove('mode-tv');
+        btnMobile.className = "px-2.5 py-1 rounded-lg font-bold bg-white text-hospital-900 shadow-xs flex items-center gap-1.5 transition";
+      } else {
+        body.classList.remove('mode-tv');
+        btnPC.className = "px-2.5 py-1 rounded-lg font-bold bg-white text-hospital-900 shadow-xs flex items-center gap-1.5 transition";
+      }
+    }
+
+    function setFilterCategory(cat) {
+      currentFilterCategory = cat;
+      ['fltAll', 'fltA', 'fltB', 'fltC'].forEach(id => {
+        document.getElementById(id).className = "px-2 py-1 rounded-lg font-bold text-slate-600 hover:bg-white/60";
+      });
+      if (cat === 'ALL') document.getElementById('fltAll').className = "px-2 py-1 rounded-lg bg-white font-bold text-slate-800 shadow-xs";
+      if (cat === 'A') document.getElementById('fltA').className = "px-2 py-1 rounded-lg bg-red-600 font-bold text-white shadow-xs";
+      if (cat === 'B') document.getElementById('fltB').className = "px-2 py-1 rounded-lg bg-amber-500 font-bold text-white shadow-xs";
+      if (cat === 'C') document.getElementById('fltC').className = "px-2 py-1 rounded-lg bg-emerald-600 font-bold text-white shadow-xs";
+      
+      renderAllQueues();
+    }
+
+    function toggleCompletedArchiveModal() {
+      const modal = document.getElementById('archiveModal');
+      modal.classList.toggle('hidden');
+      if (!modal.classList.contains('hidden')) {
+        renderArchiveTable();
+      }
+    }
+
+    function renderArchiveTable() {
+      const q = document.getElementById('archiveSearchInput').value.toLowerCase().trim();
+      const tbody = document.getElementById('archiveTableBody');
+      tbody.innerHTML = '';
+
+      let count = 0;
+      archivedPatients.forEach(pt => {
+        if (pt.name.toLowerCase().includes(q) || pt.ic.includes(q)) {
+          count++;
+          const arrival = new Date(pt.arrivalTime).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' });
+          const assessed = pt.assessedAt ? new Date(pt.assessedAt).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' }) : '-';
+          const totalWait = pt.assessedAt ? Math.floor((new Date(pt.assessedAt) - new Date(pt.arrivalTime)) / 60000) : '-';
+
+          tbody.innerHTML += `
+            <tr class="hover:bg-slate-50">
+              <td class="p-2.5 font-bold text-slate-900">${escapeHtml(pt.name)}<br><span class="font-mono text-[10px] text-slate-500 font-normal">${escapeHtml(pt.ic)}</span></td>
+              <td class="p-2.5 font-bold text-sky-800">${escapeHtml(pt.ga)}</td>
+              <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] font-black text-white ${pt.category === 'A' ? 'bg-red-600' : (pt.category === 'B' ? 'bg-amber-500' : 'bg-emerald-600')}">KUMPULAN ${pt.category}</span></td>
+              <td class="p-2.5 font-mono text-slate-600">${arrival}</td>
+              <td class="p-2.5 font-mono text-slate-600">${assessed}</td>
+              <td class="p-2.5 font-bold font-mono text-slate-800">${totalWait} Minit</td>
+              <td class="p-2.5"><span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Selesai Dinilai</span></td>
+              <td class="p-2.5 text-center">
+                <button onclick="openPrintSlipModal('${pt.id}')" class="text-slate-600 hover:text-hospital-700 p-1 font-bold">
+                  <i class="fa-solid fa-print"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        }
+      });
+
+      document.getElementById('archiveTotalLabel').innerText = `${count} pesakit selesai dinilai`;
+      if (count === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400 italic">Tiada rekod pesakit ditemui dalam arkib.</td></tr>`;
+      }
+    }
+
+    function openPrintSlipModal(patientId) {
+      const pt = activePatients.find(p => p.id === patientId) || archivedPatients.find(p => p.id === patientId);
+      if (!pt) return;
+
+      document.getElementById('slipName').innerText = pt.name;
+      document.getElementById('slipIC').innerText = pt.ic;
+      document.getElementById('slipAge').innerText = `${pt.age} Tahun`;
+      document.getElementById('slipGA').innerText = pt.ga;
+      document.getElementById('slipArrivalTime').innerText = new Date(pt.arrivalTime).toLocaleString('ms-MY');
+      document.getElementById('slipSLATarget').innerText = SLA_THRESHOLDS[pt.category].label;
+      document.getElementById('slipComplaints').innerText = pt.complaints;
+      document.getElementById('slipPrintedAt').innerText = new Date().toLocaleString('ms-MY');
+
+      const badge = document.getElementById('slipTriageBadge');
+      badge.innerText = `KUMPULAN ${pt.category}`;
+      badge.className = `px-2.5 py-1 rounded text-xs font-black uppercase text-white ${pt.category === 'A' ? 'bg-red-600' : (pt.category === 'B' ? 'bg-amber-500' : 'bg-emerald-600')}`;
+
+      document.getElementById('printSlipModal').classList.remove('hidden');
+    }
+
+    function closePrintSlipModal() {
+      document.getElementById('printSlipModal').classList.add('hidden');
+    }
+
+    function openDeployGuideModal() {
+      document.getElementById('deployGuideModal').classList.remove('hidden');
+    }
+
+    function closeDeployGuideModal() {
+      document.getElementById('deployGuideModal').classList.add('hidden');
+    }
+
+    function scrollToOverdue() {
+      const groupA = document.getElementById('groupA');
+      if (groupA) groupA.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function toggleAudioAlarm() {
+      isAudioAlarmEnabled = !isAudioAlarmEnabled;
+      const btn = document.getElementById('audioToggleBtn');
+      const icon = document.getElementById('audioIcon');
+      const text = document.getElementById('audioText');
+
+      if (isAudioAlarmEnabled) {
+        btn.className = "flex items-center gap-1.5 bg-rose-700 hover:bg-rose-800 border border-rose-500 text-white px-2.5 py-1.5 rounded-xl transition shadow-xs";
+        icon.className = "fa-solid fa-volume-high text-white animate-pulse";
+        text.innerText = "Alarm: ON";
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      } else {
+        btn.className = "flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 px-2.5 py-1.5 rounded-xl transition";
+        icon.className = "fa-solid fa-volume-xmark text-slate-400";
+        text.innerText = "Alarm: OFF";
+      }
+    }
+
+    function triggerAudioBeep() {
+      if (!isAudioAlarmEnabled || !audioContext) return;
+      try {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioContext.currentTime);
+        gain.gain.setValueAtTime(0.1, audioContext.currentTime);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.3);
+      } catch(e) {}
+    }
+
+    function exportCSVData() {
+      let csv = "ID,Nama,IC,Umur,GA,WaktuKetibaan,Aduan,Kumpulan,Status,WaktuSelesai\n";
+      const all = [...activePatients, ...archivedPatients];
+      all.forEach(p => {
+        csv += `"${p.id}","${p.name}","${p.ic}","${p.age}","${p.ga}","${p.arrivalTime}","${p.complaints.replace(/"/g, '""')}","${p.category}","${p.status}","${p.assessedAt || ''}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `PAC_Triaj_Export_${new Date().toISOString().slice(0, 10)}.csv`);
+      a.click();
+    }
+
+    function showAlert(title, message, type = 'info') {
+      const banner = document.getElementById('alertBanner');
+      const icon = document.getElementById('alertIcon');
+      const titleElem = document.getElementById('alertTitle');
+      const msgElem = document.getElementById('alertMessage');
+
+      titleElem.innerText = title;
+      msgElem.innerText = message;
+
+      if (type === 'success') {
+        banner.className = "rounded-xl p-3 flex items-start space-x-3 shadow-xs bg-emerald-50 text-emerald-900 border border-emerald-200 no-print";
+        icon.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i>`;
+      } else if (type === 'warning') {
+        banner.className = "rounded-xl p-3 flex items-start space-x-3 shadow-xs bg-amber-50 text-amber-900 border border-amber-200 no-print";
+        icon.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-600"></i>`;
+      } else {
+        banner.className = "rounded-xl p-3 flex items-start space-x-3 shadow-xs bg-sky-50 text-sky-900 border border-sky-200 no-print";
+        icon.innerHTML = `<i class="fa-solid fa-circle-info text-sky-600"></i>`;
+      }
+
+      banner.classList.remove('hidden');
+      setTimeout(() => hideAlert(), 5000);
+    }
+
+    function hideAlert() {
+      document.getElementById('alertBanner').classList.add('hidden');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
